@@ -1,0 +1,6 @@
+{
+  "name": "Traffic WebGIS YOLO",
+  "description": "Bản đồ WebGIS giám sát giao thông và nhận diện phương tiện YOLO trên Đà Nẵng, Việt Nam.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

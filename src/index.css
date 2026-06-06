@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Elegant Dark Theme Palette overrides */
+  --color-slate-950: #0a0c10;
+  --color-slate-900: #0f1115;
+  --color-slate-850: #12151b;
+  --color-slate-800: #171b22;
+  --color-slate-700: #242b36;
+  --color-slate-600: #343d4d;
+}
+
+/* Custom map marker styles */
+.custom-radar-pulse {
+  position: relative;
+}
+
+.custom-radar-pulse::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.4);
+  animation: radar-pulse-anim 1.8s infinite ease-out;
+}
+
+@keyframes radar-pulse-anim {
+  0% {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+
+.custom-green-pulse::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.3);
+  animation: radar-pulse-anim 2.2s infinite ease-out;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Video container ratios */
+.video-ratio {
+  aspect-ratio: 16 / 9;
+}
+
+/* Force standard transparent container on Leaflet custom divIcon */
+.leaflet-div-icon.custom-marker-icon,
+.leaflet-div-icon.custom-temp-marker {
+  background: transparent !important;
+  border: none !important;
+}

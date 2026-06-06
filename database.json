@@ -1,0 +1,822 @@
+{
+  "users": [
+    {
+      "id": "user-admin",
+      "username": "admin",
+      "fullName": "Quản trị viên Hệ thống",
+      "role": "admin"
+    },
+    {
+      "id": "user-demo",
+      "username": "user",
+      "fullName": "Khách giám sát giao thông",
+      "role": "user"
+    }
+  ],
+  "cameras": [
+    {
+      "name": "cam",
+      "youtubeUrl": "https://www.youtube.com/watch?v=sJvEFrG0wq0",
+      "lat": 16.066062,
+      "lng": 108.209584,
+      "status": "active",
+      "id": "cam-1780534767558",
+      "lastActive": "2026-06-05T03:41:59.244Z",
+      "vehicleCount": 19,
+      "averageSpeed": null,
+      "trafficStatus": "moderate",
+      "yoloConfig": {
+        "confidenceThreshold": 0.45,
+        "iouThreshold": 0.35,
+        "classesEnabled": [
+          "car",
+          "motorcycle",
+          "truck",
+          "bus"
+        ],
+        "processingSpeed": 30,
+        "showBoxes": true,
+        "showLabels": true,
+        "showConfidence": true
+      },
+      "lastTelemetry": "2026-06-05T03:41:59.244Z",
+      "carCount": 15,
+      "motorcycleCount": 2,
+      "truckCount": 1,
+      "busCount": 1,
+      "bicycleCount": 1,
+      "lastBoxes": [
+        {
+          "id": 294,
+          "class": "car",
+          "confidence": 0.93,
+          "box": [
+            0.0934,
+            0.3205,
+            0.2184,
+            0.467
+          ],
+          "speed": 0,
+          "speeding": false
+        },
+        {
+          "id": 524,
+          "class": "car",
+          "confidence": 0.92,
+          "box": [
+            0.2867,
+            0.3576,
+            0.4469,
+            0.5326
+          ],
+          "speed": 90,
+          "speeding": true
+        },
+        {
+          "id": 1,
+          "class": "car",
+          "confidence": 0.92,
+          "box": [
+            0.4703,
+            0.5059,
+            0.6953,
+            0.8694
+          ],
+          "speed": 4,
+          "speeding": false
+        },
+        {
+          "id": 493,
+          "class": "car",
+          "confidence": 0.9,
+          "box": [
+            0.4156,
+            0.2507,
+            0.4914,
+            0.3392
+          ],
+          "speed": 33,
+          "speeding": false
+        },
+        {
+          "id": 400,
+          "class": "car",
+          "confidence": 0.88,
+          "box": [
+            0.0001,
+            0.3917,
+            0.0993,
+            0.5806
+          ],
+          "speed": 0,
+          "speeding": false
+        },
+        {
+          "id": 216,
+          "class": "car",
+          "confidence": 0.86,
+          "box": [
+            0.2137,
+            0.2806,
+            0.309,
+            0.3819
+          ],
+          "speed": 13,
+          "speeding": false
+        },
+        {
+          "id": 512,
+          "class": "car",
+          "confidence": 0.86,
+          "box": [
+            0.5312,
+            0.2372,
+            0.5797,
+            0.3031
+          ],
+          "speed": 18,
+          "speeding": false
+        },
+        {
+          "id": 468,
+          "class": "motorcycle",
+          "confidence": 0.83,
+          "box": [
+            0.5164,
+            0.3604,
+            0.5633,
+            0.466
+          ],
+          "speed": 1,
+          "speeding": false
+        },
+        {
+          "id": 516,
+          "class": "motorcycle",
+          "confidence": 0.8,
+          "box": [
+            0.2367,
+            0.3719,
+            0.2816,
+            0.4635
+          ],
+          "speed": 90,
+          "speeding": true
+        },
+        {
+          "id": 351,
+          "class": "car",
+          "confidence": 0.8,
+          "box": [
+            0.6395,
+            0.2418,
+            0.6754,
+            0.3033
+          ],
+          "speed": 0,
+          "speeding": false
+        },
+        {
+          "id": 357,
+          "class": "car",
+          "confidence": 0.78,
+          "box": [
+            0.3434,
+            0.2439,
+            0.4027,
+            0.3168
+          ],
+          "speed": 3,
+          "speeding": false
+        },
+        {
+          "id": 525,
+          "class": "motorcycle",
+          "confidence": 0.62,
+          "box": [
+            0.5852,
+            0.3753,
+            0.6398,
+            0.4677
+          ],
+          "speed": 4,
+          "speeding": false
+        },
+        {
+          "id": 521,
+          "class": "motorcycle",
+          "confidence": 0.41,
+          "box": [
+            0.5867,
+            0.2424,
+            0.6023,
+            0.2903
+          ],
+          "speed": 28,
+          "speeding": false
+        },
+        {
+          "id": 387,
+          "class": "car",
+          "confidence": 0.38,
+          "box": [
+            0.2992,
+            0.2708,
+            0.3566,
+            0.3486
+          ],
+          "speed": 19,
+          "speeding": false
+        },
+        {
+          "id": 383,
+          "class": "car",
+          "confidence": 0.37,
+          "box": [
+            0.6273,
+            0.1917,
+            0.6492,
+            0.2243
+          ],
+          "speed": 16,
+          "speeding": false
+        },
+        {
+          "id": 522,
+          "class": "car",
+          "confidence": 0.37,
+          "box": [
+            0.4223,
+            0.2198,
+            0.4707,
+            0.2684
+          ],
+          "speed": 36,
+          "speeding": false
+        },
+        {
+          "id": 523,
+          "class": "motorcycle",
+          "confidence": 0.36,
+          "box": [
+            0.3346,
+            0.2938,
+            0.3631,
+            0.3625
+          ],
+          "speed": 32,
+          "speeding": false
+        },
+        {
+          "id": 527,
+          "class": "car",
+          "confidence": 0.33,
+          "box": [
+            0.5836,
+            0.191,
+            0.6047,
+            0.2215
+          ],
+          "speed": 7,
+          "speeding": false
+        },
+        {
+          "id": 500,
+          "class": "motorcycle",
+          "confidence": 0.32,
+          "box": [
+            0.5047,
+            0.234,
+            0.5234,
+            0.2826
+          ],
+          "speed": 66,
+          "speeding": true
+        },
+        {
+          "id": 532,
+          "class": "car",
+          "confidence": 0.31,
+          "box": [
+            0.6539,
+            0.2021,
+            0.6789,
+            0.2326
+          ],
+          "speed": 10,
+          "speeding": false
+        },
+        {
+          "id": 531,
+          "class": "car",
+          "confidence": 0.28,
+          "box": [
+            0.3916,
+            0.2313,
+            0.4305,
+            0.2854
+          ],
+          "speed": 33,
+          "speeding": false
+        },
+        {
+          "id": 513,
+          "class": "motorcycle",
+          "confidence": 0.25,
+          "box": [
+            0.707,
+            0.3184,
+            0.7516,
+            0.3844
+          ],
+          "speed": 0,
+          "speeding": false
+        }
+      ]
+    },
+    {
+      "name": "cam2",
+      "youtubeUrl": "https://www.youtube.com/watch?v=G_G8A6JU_LI",
+      "lat": 16.065545,
+      "lng": 108.203938,
+      "status": "active",
+      "id": "cam-1780630039033",
+      "lastActive": "2026-06-05T03:42:20.484Z",
+      "vehicleCount": 27,
+      "averageSpeed": null,
+      "trafficStatus": "moderate",
+      "yoloConfig": {
+        "confidenceThreshold": 0.45,
+        "iouThreshold": 0.35,
+        "classesEnabled": [
+          "car",
+          "motorcycle",
+          "truck",
+          "bus"
+        ],
+        "processingSpeed": 30,
+        "showBoxes": true,
+        "showLabels": true,
+        "showConfidence": true
+      },
+      "lastTelemetry": "2026-06-05T03:42:20.484Z",
+      "carCount": 17,
+      "motorcycleCount": 8,
+      "truckCount": 1,
+      "busCount": 2,
+      "bicycleCount": 2
+    }
+  ],
+  "alerts": [
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 109km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543061492",
+      "time": "2026-06-04T03:17:41.492Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 89km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543061423",
+      "time": "2026-06-04T03:17:41.423Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 70km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543055522",
+      "time": "2026-06-04T03:17:35.522Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 89km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543055472",
+      "time": "2026-06-04T03:17:35.472Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 56km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543043536",
+      "time": "2026-06-04T03:17:23.536Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 66km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543034692",
+      "time": "2026-06-04T03:17:14.692Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 88km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543034488",
+      "time": "2026-06-04T03:17:14.488Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 72km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543034350",
+      "time": "2026-06-04T03:17:14.350Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 108km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543033642",
+      "time": "2026-06-04T03:17:13.642Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 98km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543033509",
+      "time": "2026-06-04T03:17:13.509Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 56km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543033299",
+      "time": "2026-06-04T03:17:13.299Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 101km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543033240",
+      "time": "2026-06-04T03:17:13.240Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 106km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543026467",
+      "time": "2026-06-04T03:17:06.467Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 74km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543026259",
+      "time": "2026-06-04T03:17:06.259Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 62km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543025952",
+      "time": "2026-06-04T03:17:05.952Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 89km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543021718",
+      "time": "2026-06-04T03:17:01.718Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 61km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543021518",
+      "time": "2026-06-04T03:17:01.518Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 107km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543021345",
+      "time": "2026-06-04T03:17:01.345Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 78km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543021199",
+      "time": "2026-06-04T03:17:01.199Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 57km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543020463",
+      "time": "2026-06-04T03:17:00.463Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 86km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543015505",
+      "time": "2026-06-04T03:16:55.505Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 74km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543015352",
+      "time": "2026-06-04T03:16:55.352Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 85km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543015059",
+      "time": "2026-06-04T03:16:55.059Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 79km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780543014769",
+      "time": "2026-06-04T03:16:54.769Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 57km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541816327",
+      "time": "2026-06-04T02:56:56.327Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 60km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541816176",
+      "time": "2026-06-04T02:56:56.176Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 67km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541808038",
+      "time": "2026-06-04T02:56:48.038Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 64km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541757802",
+      "time": "2026-06-04T02:55:57.802Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 75km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541757456",
+      "time": "2026-06-04T02:55:57.456Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 93km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541757142",
+      "time": "2026-06-04T02:55:57.142Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 89km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541751177",
+      "time": "2026-06-04T02:55:51.177Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 69km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541745877",
+      "time": "2026-06-04T02:55:45.877Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 78km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541745534",
+      "time": "2026-06-04T02:55:45.534Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 67km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541739986",
+      "time": "2026-06-04T02:55:39.986Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 98km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541723595",
+      "time": "2026-06-04T02:55:23.595Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 95km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541723283",
+      "time": "2026-06-04T02:55:23.283Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 64km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541722827",
+      "time": "2026-06-04T02:55:22.827Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 67km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541683777",
+      "time": "2026-06-04T02:54:43.777Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 107km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541683304",
+      "time": "2026-06-04T02:54:43.304Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 109km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541682859",
+      "time": "2026-06-04T02:54:42.859Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 107km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541682743",
+      "time": "2026-06-04T02:54:42.743Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 57km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541682520",
+      "time": "2026-06-04T02:54:42.520Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 82km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541682481",
+      "time": "2026-06-04T02:54:42.481Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 108km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541676536",
+      "time": "2026-06-04T02:54:36.536Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 84km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541676502",
+      "time": "2026-06-04T02:54:36.502Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 87km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541676465",
+      "time": "2026-06-04T02:54:36.465Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 105km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541676394",
+      "time": "2026-06-04T02:54:36.394Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện CAR chạy 64km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541658867",
+      "time": "2026-06-04T02:54:18.867Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 99km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541658685",
+      "time": "2026-06-04T02:54:18.685Z"
+    },
+    {
+      "cameraId": "cam-1780534767558",
+      "cameraName": "cam",
+      "type": "speeding",
+      "description": "Phát hiện MOTORCYCLE chạy 97km/h tại cam",
+      "severity": "medium",
+      "id": "alert-1780541653213",
+      "time": "2026-06-04T02:54:13.213Z"
+    }
+  ]
+}
