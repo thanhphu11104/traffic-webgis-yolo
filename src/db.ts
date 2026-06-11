@@ -1,14 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import sqlite3 from 'sqlite3';
 import { Camera, User, TrafficAlert, YoloConfig } from './types';
 
-const DB_FILE = path.join(process.cwd(), 'database.json');
-
-interface DatabaseSchema {
-  users: User[];
-  cameras: Camera[];
-  alerts: TrafficAlert[];
-}
+const DB_PATH = path.join(process.cwd(), 'database.sqlite');
 
 const DEFAULT_YOLO_CONFIG: YoloConfig = {
   confidenceThreshold: 0.45,
@@ -90,178 +85,360 @@ const DEFAULT_ALERTS: TrafficAlert[] = [
     cameraId: 'cam-2',
     cameraName: 'Camera Cầu Sông Hàn (Quay Trực Tiếp)',
     time: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    type: 'speeding',
-    description: 'Phát hiện ô tô biển số 43A-XXXX di chuyển vượt quá tốc độ cho phép (68km/h).',
+    type: 'congestion',
+    description: 'Lưu lượng di chuyển chậm qua cầu Sông Hàn ghi nhận mật độ giao thông tăng mạnh.',
     severity: 'low',
   }
 ];
 
-class SQLiteJSONDatabase {
-  private data: DatabaseSchema;
+function parseCamera(row: any): Camera {
+  if (!row) return row;
+  return {
+    ...row,
+    yoloConfig: typeof row.yoloConfig === 'string' ? JSON.parse(row.yoloConfig) : row.yoloConfig,
+    detectionZone: typeof row.detectionZone === 'string' ? JSON.parse(row.detectionZone) : row.detectionZone,
+    lastBoxes: typeof row.lastBoxes === 'string' ? JSON.parse(row.lastBoxes) : row.lastBoxes,
+  };
+}
+
+class SQLiteDatabase {
+  private db: sqlite3.Database;
 
   constructor() {
-    this.data = { users: [], cameras: [], alerts: [] };
-    this.load();
-  }
-
-  private load() {
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        this.data = JSON.parse(raw);
-        // Ensure default data if empty or missing
-        if (!this.data.cameras || this.data.cameras.length === 0) {
-          this.data.cameras = DEFAULT_CAMERAS;
-          this.save();
-        }
-        if (!this.data.alerts || this.data.alerts.length === 0) {
-          this.data.alerts = DEFAULT_ALERTS;
-          this.save();
-        }
+    this.db = new sqlite3.Database(DB_PATH, (err) => {
+      if (err) {
+        console.error('Error opening SQLite database:', err);
       } else {
-        this.data = {
-          users: [
-            { id: 'user-admin', username: 'admin', fullName: 'Quản trị viên Hệ thống', role: 'admin' },
-            { id: 'user-demo', username: 'user', fullName: 'Khách giám sát giao thông', role: 'user' }
-          ],
-          cameras: DEFAULT_CAMERAS,
-          alerts: DEFAULT_ALERTS
-        };
-        // Also save mock credentials associated passwords in memory or config map
-        this.save();
+        console.log('Connected to SQLite database at:', DB_PATH);
+        this.initializeSchema();
       }
-    } catch (e) {
-      console.error('Error loading database, setting defaults', e);
-      this.data = {
-        users: [
-          { id: 'user-admin', username: 'admin', fullName: 'Quản trị viên Hệ thống', role: 'admin' },
-          { id: 'user-demo', username: 'user', fullName: 'Khách giám sát giao thông', role: 'user' }
-        ],
-        cameras: DEFAULT_CAMERAS,
-        alerts: DEFAULT_ALERTS
-      };
-      this.save();
-    }
+    });
   }
 
-  private save() {
+  private run(sql: string, params: any[] = []): Promise<{ lastID: number; changes: number }> {
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, function (err) {
+        if (err) reject(err);
+        else resolve({ lastID: this.lastID, changes: this.changes });
+      });
+    });
+  }
+
+  private get(sql: string, params: any[] = []): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  }
+
+  private all(sql: string, params: any[] = []): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  }
+
+  private async initializeSchema() {
     try {
-      const dir = path.dirname(DB_FILE);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      // 1. Create table users
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT UNIQUE,
+          fullName TEXT,
+          role TEXT,
+          passwordHash TEXT
+        )
+      `);
+
+      // 2. Create table cameras
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS cameras (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          youtubeUrl TEXT,
+          lat REAL,
+          lng REAL,
+          status TEXT,
+          lastActive TEXT,
+          vehicleCount INTEGER,
+          averageSpeed INTEGER,
+          trafficStatus TEXT,
+          yoloConfig TEXT,
+          detectionZone TEXT,
+          lastTelemetry TEXT,
+          carCount INTEGER,
+          motorcycleCount INTEGER,
+          truckCount INTEGER,
+          busCount INTEGER,
+          bicycleCount INTEGER,
+          lastBoxes TEXT
+        )
+      `);
+
+      // 3. Create table alerts
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS alerts (
+          id TEXT PRIMARY KEY,
+          cameraId TEXT,
+          cameraName TEXT,
+          time TEXT,
+          type TEXT,
+          description TEXT,
+          severity TEXT
+        )
+      `);
+
+      // Seed initial data if tables are empty
+      const usersCheck = await this.get(`SELECT COUNT(*) as count FROM users`);
+      const usersCount = usersCheck ? usersCheck.count : 0;
+      if (usersCount === 0) {
+        await this.run(`
+          INSERT INTO users (id, username, fullName, role, passwordHash) VALUES 
+          ('user-admin', 'admin', 'Quản trị viên Hệ thống', 'admin', 'admin123'),
+          ('user-demo', 'user', 'Khách giám sát giao thông', 'user', '123456')
+        `);
+        console.log('[SQLite] Seeded users table');
       }
-      fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('Error writing to database.json', e);
+
+      const camerasCheck = await this.get(`SELECT COUNT(*) as count FROM cameras`);
+      const camerasCount = camerasCheck ? camerasCheck.count : 0;
+      if (camerasCount === 0) {
+        for (const cam of DEFAULT_CAMERAS) {
+          await this.run(`
+            INSERT INTO cameras (
+              id, name, youtubeUrl, lat, lng, status, lastActive, 
+              vehicleCount, averageSpeed, trafficStatus, yoloConfig, detectionZone,
+              carCount, motorcycleCount, truckCount, busCount, bicycleCount, lastBoxes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            cam.id,
+            cam.name,
+            cam.youtubeUrl,
+            cam.lat,
+            cam.lng,
+            cam.status,
+            cam.lastActive,
+            cam.vehicleCount,
+            cam.averageSpeed,
+            cam.trafficStatus,
+            JSON.stringify(cam.yoloConfig),
+            JSON.stringify(cam.detectionZone || []),
+            0, 0, 0, 0, 0,
+            JSON.stringify([])
+          ]);
+        }
+        console.log('[SQLite] Seeded cameras table');
+      }
+
+      const alertsCheck = await this.get(`SELECT COUNT(*) as count FROM alerts`);
+      const alertsCount = alertsCheck ? alertsCheck.count : 0;
+      if (alertsCount === 0) {
+        for (const alert of DEFAULT_ALERTS) {
+          await this.run(`
+            INSERT INTO alerts (id, cameraId, cameraName, time, type, description, severity) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [
+            alert.id,
+            alert.cameraId,
+            alert.cameraName,
+            alert.time,
+            alert.type,
+            alert.description,
+            alert.severity
+          ]);
+        }
+        console.log('[SQLite] Seeded alerts table');
+      }
+    } catch (err) {
+      console.error('Error during SQLite setup schema initialization:', err);
     }
   }
 
-  // Auth Operations (Using hardcoded demo passwords for safety and quick local start)
-  public login(username: string, passwordHash: string): { success: boolean; user?: User; error?: string } {
-    const found = this.data.users.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
-    if (!found) {
-      return { success: false, error: 'Tài khoản không tồn tại' };
+  // Auth Operations
+  public async login(username: string, passwordHash: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      const found = await this.get(`SELECT * FROM users WHERE LOWER(username) = ?`, [username.trim().toLowerCase()]);
+      if (!found) {
+        return { success: false, error: 'Tài khoản không tồn tại trên hệ thống SQLite' };
+      }
+      if (found.role === 'admin' && passwordHash !== 'admin123') {
+        return { success: false, error: 'Mật khẩu quản trị viên không chính xác' };
+      }
+      if (found.role === 'user' && passwordHash !== '123456') {
+        return { success: false, error: 'Mật khẩu người dùng không chính xác' };
+      }
+      return { 
+        success: true, 
+        user: { id: found.id, username: found.username, fullName: found.fullName, role: found.role as 'admin' | 'user' } 
+      };
+    } catch (e: any) {
+      return { success: false, error: e.message };
     }
-    // Simple password validation for demo: admin -> admin123, user -> 123456
-    if (found.role === 'admin' && passwordHash !== 'admin123') {
-      return { success: false, error: 'Mật khẩu quản trị viên không chính xác' };
-    }
-    if (found.role === 'user' && passwordHash !== '123456') {
-      return { success: false, error: 'Mật khẩu người dùng không chính xác' };
-    }
-    return { success: true, user: found };
   }
 
-  public register(username: string, fullName: string, passwordHash: string, role: 'admin' | 'user' = 'user'): { success: boolean; user?: User; error?: string } {
-    const normalized = username.trim().toLowerCase();
-    if (this.data.users.some(u => u.username.toLowerCase() === normalized)) {
-      return { success: false, error: 'Tên đăng nhập đã tồn tại trên hệ thống sqlite' };
+  public async register(username: string, fullName: string, passwordHash: string, role: 'admin' | 'user' = 'user'): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      const normalized = username.trim().toLowerCase();
+      const existing = await this.get(`SELECT * FROM users WHERE LOWER(username) = ?`, [normalized]);
+      if (existing) {
+        return { success: false, error: 'Tên đăng nhập đã tồn tại trên hệ thống SQLite' };
+      }
+      const newUser: User = {
+        id: `user-${Date.now()}`,
+        username: username.trim(),
+        fullName: fullName.trim() || username,
+        role: role
+      };
+      await this.run(
+        `INSERT INTO users (id, username, fullName, role, passwordHash) VALUES (?, ?, ?, ?, ?)`,
+        [newUser.id, newUser.username, newUser.fullName, newUser.role, passwordHash]
+      );
+      return { success: true, user: newUser };
+    } catch (e: any) {
+      return { success: false, error: e.message };
     }
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      username: username.trim(),
-      fullName: fullName.trim() || username,
-      role: role
-    };
-    this.data.users.push(newUser);
-    this.save();
-    return { success: true, user: newUser };
   }
 
   // Camera Operations
-  public getCameras(): Camera[] {
-    this.load();
-    return this.data.cameras;
+  public async getCameras(): Promise<Camera[]> {
+    try {
+      const rows = await this.all(`SELECT * FROM cameras`);
+      return rows.map(parseCamera);
+    } catch (e) {
+      console.error('Error fetching cameras from SQLite:', e);
+      return [];
+    }
   }
 
-  public getCameraById(id: string): Camera | undefined {
-    this.load();
-    return this.data.cameras.find(c => c.id === id);
+  public async getCameraById(id: string): Promise<Camera | undefined> {
+    try {
+      const row = await this.get(`SELECT * FROM cameras WHERE id = ?`, [id]);
+      return row ? parseCamera(row) : undefined;
+    } catch (e) {
+      console.error(`Error fetching camera ${id} from SQLite:`, e);
+      return undefined;
+    }
   }
 
-  public addCamera(camera: Omit<Camera, 'id' | 'lastActive' | 'vehicleCount' | 'averageSpeed' | 'trafficStatus' | 'yoloConfig'>): Camera {
-    this.load();
-    const newCam: Camera = {
+  public async addCamera(camera: Omit<Camera, 'id' | 'lastActive' | 'vehicleCount' | 'averageSpeed' | 'trafficStatus' | 'yoloConfig'>): Promise<Camera> {
+    const id = `cam-${Date.now()}`;
+    const lastActive = new Date().toISOString();
+    const yoloConfig = { ...DEFAULT_YOLO_CONFIG };
+    const detectionZone = camera.detectionZone || [];
+    
+    await this.run(`
+      INSERT INTO cameras (
+        id, name, youtubeUrl, lat, lng, status, lastActive, 
+        vehicleCount, averageSpeed, trafficStatus, yoloConfig, detectionZone,
+        carCount, motorcycleCount, truckCount, busCount, bicycleCount, lastBoxes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      camera.name,
+      camera.youtubeUrl,
+      camera.lat,
+      camera.lng,
+      camera.status,
+      lastActive,
+      0, 50, 'normal',
+      JSON.stringify(yoloConfig),
+      JSON.stringify(detectionZone),
+      0, 0, 0, 0, 0,
+      JSON.stringify([])
+    ]);
+
+    return {
       ...camera,
-      id: `cam-${Date.now()}`,
-      lastActive: new Date().toISOString(),
+      id,
+      lastActive,
       vehicleCount: 0,
       averageSpeed: 50,
       trafficStatus: 'normal',
-      yoloConfig: { ...DEFAULT_YOLO_CONFIG }
+      yoloConfig,
+      detectionZone
     };
-    this.data.cameras.push(newCam);
-    this.save();
-    return newCam;
   }
 
-  public updateCamera(id: string, updates: Partial<Camera>): Camera | null {
-    this.load();
-    const index = this.data.cameras.findIndex(c => c.id === id);
-    if (index === -1) return null;
-    
-    this.data.cameras[index] = {
-      ...this.data.cameras[index],
-      ...updates,
-      lastActive: new Date().toISOString()
-    };
-    
-    this.save();
-    return this.data.cameras[index];
-  }
+  public async updateCamera(id: string, updates: Partial<Camera>): Promise<Camera | null> {
+    const current = await this.getCameraById(id);
+    if (!current) return null;
 
-  public deleteCamera(id: string): boolean {
-    this.load();
-    const lengthBefore = this.data.cameras.length;
-    this.data.cameras = this.data.cameras.filter(c => c.id !== id);
-    if (this.data.cameras.length !== lengthBefore) {
-      this.save();
-      return true;
+    const fieldsToUpdate: string[] = [];
+    const params: any[] = [];
+
+    const keys = Object.keys(updates) as (keyof Camera)[];
+    for (const key of keys) {
+      if (key === 'id') continue;
+      
+      let val: any = updates[key];
+      if (key === 'yoloConfig' || key === 'detectionZone' || key === 'lastBoxes') {
+        val = JSON.stringify(val);
+      }
+      
+      fieldsToUpdate.push(`${key} = ?`);
+      params.push(val);
     }
-    return false;
+
+    if (fieldsToUpdate.length > 0) {
+      fieldsToUpdate.push(`lastActive = ?`);
+      params.push(new Date().toISOString());
+      
+      params.push(id);
+      await this.run(`
+        UPDATE cameras 
+        SET ${fieldsToUpdate.join(', ')} 
+        WHERE id = ?
+      `, params);
+    }
+
+    const updated = await this.getCameraById(id);
+    return updated || null;
+  }
+
+  public async deleteCamera(id: string): Promise<boolean> {
+    const res = await this.run(`DELETE FROM cameras WHERE id = ?`, [id]);
+    return res.changes > 0;
   }
 
   // Alerts Operations
-  public getAlerts(): TrafficAlert[] {
-    this.load();
-    return this.data.alerts;
+  public async getAlerts(): Promise<TrafficAlert[]> {
+    try {
+      const rows = await this.all(`SELECT * FROM alerts ORDER BY time DESC LIMIT 50`);
+      return rows;
+    } catch (e) {
+      console.error('Error fetching alerts from SQLite:', e);
+      return [];
+    }
   }
 
-  public addAlert(alert: Omit<TrafficAlert, 'id' | 'time'>): TrafficAlert {
-    this.load();
-    const newAlert: TrafficAlert = {
+  public async addAlert(alert: Omit<TrafficAlert, 'id' | 'time'>): Promise<TrafficAlert> {
+    const id = `alert-${Date.now()}`;
+    const time = new Date().toISOString();
+    
+    await this.run(`
+      INSERT INTO alerts (id, cameraId, cameraName, time, type, description, severity)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      alert.cameraId,
+      alert.cameraName,
+      time,
+      alert.type,
+      alert.description,
+      alert.severity
+    ]);
+
+    return {
       ...alert,
-      id: `alert-${Date.now()}`,
-      time: new Date().toISOString()
+      id,
+      time
     };
-    this.data.alerts.unshift(newAlert); // Newest first
-    if (this.data.alerts.length > 50) {
-      this.data.alerts.pop(); // Limit logs
-    }
-    this.save();
-    return newAlert;
   }
 }
 
-export const dbInstance = new SQLiteJSONDatabase();
+export const dbInstance = new SQLiteDatabase();
 export default dbInstance;

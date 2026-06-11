@@ -21,8 +21,8 @@
       "lng": 108.209584,
       "status": "active",
       "id": "cam-1780534767558",
-      "lastActive": "2026-06-05T03:41:59.244Z",
-      "vehicleCount": 19,
+      "lastActive": "2026-06-07T01:51:22.665Z",
+      "vehicleCount": 17,
       "averageSpeed": null,
       "trafficStatus": "moderate",
       "yoloConfig": {
@@ -39,9 +39,9 @@
         "showLabels": true,
         "showConfidence": true
       },
-      "lastTelemetry": "2026-06-05T03:41:59.244Z",
-      "carCount": 15,
-      "motorcycleCount": 2,
+      "lastTelemetry": "2026-06-07T01:51:22.665Z",
+      "carCount": 13,
+      "motorcycleCount": 4,
       "truckCount": 1,
       "busCount": 1,
       "bicycleCount": 1,

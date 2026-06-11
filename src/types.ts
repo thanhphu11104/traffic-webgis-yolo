@@ -27,6 +27,7 @@ export interface Camera {
   busCount?: number;
   bicycleCount?: number;
   lastBoxes?: { id?: number; class: string; confidence: number; box: number[]; speed?: number; speeding?: boolean }[];
+  detectionZone?: { x: number; y: number }[];
 }
 
 export interface User {

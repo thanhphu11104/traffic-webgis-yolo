@@ -5,18 +5,16 @@ import { X } from 'lucide-react';
 interface YoloStreamPlayerProps {
   camera: Camera;
   yoloConfig: YoloConfig;
-  onAlertTriggered: (type: string, description: string, severity: 'low' | 'medium' | 'high') => void;
   onClose?: () => void;
 }
 
-const MJPEG_BASE = 'http://localhost:5010';
+const MJPEG_BASE = '/mjpeg';
 
-export default function YoloStreamPlayer({ camera, yoloConfig, onAlertTriggered, onClose }: YoloStreamPlayerProps) {
+export default function YoloStreamPlayer({ camera, yoloConfig, onClose }: YoloStreamPlayerProps) {
   const [localCamera, setLocalCamera] = useState<Camera>(camera);
   const [imgError, setImgError]       = useState(false);
   const [logs, setLogs]               = useState<string[]>([]);
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
-  const [aiReport, setAiReport]       = useState<string | null>(null);
+  const [useRoi, setUseRoi]           = useState(true);
 
   // Sync khi prop thay đổi
   useEffect(() => { 
@@ -24,14 +22,7 @@ export default function YoloStreamPlayer({ camera, yoloConfig, onAlertTriggered,
     setImgError(false);
   }, [camera]);
 
-  // Thông báo dừng nhận diện và dọn dẹp luồng camera cũ khi chuyển camera hoặc tắt xem
-  useEffect(() => {
-    return () => {
-      const stopUrl = `${MJPEG_BASE}/stop_view/${camera.id}`;
-      // Gửi tín hiệu dứt khoát tới python server dừng ngay camera đang xem bằng fetch
-      fetch(stopUrl, { method: 'POST', mode: 'no-cors', keepalive: true }).catch(() => {});
-    };
-  }, [camera.id]);
+
 
   // Poll telemetry nhẹ để cập nhật số liệu thống kê (không cần sync box nữa)
   useEffect(() => {
@@ -70,35 +61,10 @@ export default function YoloStreamPlayer({ camera, yoloConfig, onAlertTriggered,
   }, [yoloConfig]);
 
   const classesEnabledParam = debouncedConfig.classesEnabled.join(',');
-  const mjpegSrc = `${MJPEG_BASE}/stream/${localCamera.id}?conf=${debouncedConfig.confidenceThreshold}&classes=${classesEnabledParam}&show_boxes=${debouncedConfig.showBoxes}&show_labels=${debouncedConfig.showLabels}`;
-
-  const handleGeminiAnalysis = async () => {
-    setAiAnalyzing(true);
-    setAiReport(null);
-    try {
-      await fetch('/api/alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cameraId: localCamera.id,
-          cameraName: localCamera.name,
-          type: 'congestion',
-          description: `Phân tích AI hoàn tất cho camera: ${localCamera.name}.`,
-          severity: 'low'
-        })
-      });
-      await new Promise(r => setTimeout(r, 1500));
-      setAiReport(
-        `Phân tích camera ${localCamera.name}: Lưu lượng ${
-          localCamera.trafficStatus === 'congested' ? 'cao (tắc đường)' : 'bình thường'
-        }. Tổng ${localCamera.vehicleCount ?? 0} phương tiện. Tốc độ trung bình ${localCamera.averageSpeed ?? 0} km/h.`
-      );
-    } catch {
-      setAiReport('Lỗi kết nối phân tích AI.');
-    } finally {
-      setAiAnalyzing(false);
-    }
-  };
+  const encodedUrl = encodeURIComponent(localCamera.youtubeUrl || '');
+  const encodedName = encodeURIComponent(localCamera.name || '');
+  const encodedZone = encodeURIComponent(JSON.stringify(localCamera.detectionZone || []));
+  const mjpegSrc = `${MJPEG_BASE}/stream/${localCamera.id}?url=${encodedUrl}&name=${encodedName}&roi=${encodedZone}&conf=${debouncedConfig.confidenceThreshold}&classes=${classesEnabledParam}&show_boxes=${debouncedConfig.showBoxes}&show_labels=${debouncedConfig.showLabels}&use_roi=${useRoi}`;
 
   const displayCar        = localCamera.carCount        ?? 0;
   const displayMoto       = localCamera.motorcycleCount ?? 0;
@@ -157,11 +123,11 @@ export default function YoloStreamPlayer({ camera, yoloConfig, onAlertTriggered,
               </div>
             )}
             {/* Live badge */}
-            <div className="absolute top-2 left-2 bg-black/50 text-white/90 text-[9px]
-                            font-mono px-2 py-0.5 rounded backdrop-blur-sm z-10 select-none
-                            flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-              LIVE · Đã đồng bộ cấu hình tương tác
+            <div className="absolute top-2 left-2 bg-black/40 text-rose-500 text-[9px]
+                            font-mono px-1.5 py-0.5 rounded-md backdrop-blur-sm z-10 select-none
+                            flex items-center gap-1 border border-rose-500/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />
+              LIVE
             </div>
           </>
         ) : (
@@ -172,49 +138,48 @@ export default function YoloStreamPlayer({ camera, yoloConfig, onAlertTriggered,
         )}
       </div>
 
-      {/* Số liệu xe */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* ROI Detection Zone toggle checkbox if a zone exists */}
+      {isActive && localCamera.detectionZone && localCamera.detectionZone.length >= 3 && (
+        <div className="flex items-center gap-2 p-2.5 bg-slate-900/45 border border-slate-900 rounded-lg select-none">
+          <input
+            id="use_roi_toggle"
+            type="checkbox"
+            checked={useRoi}
+            onChange={(e) => setUseRoi(e.target.checked)}
+            className="w-4 h-4 rounded text-indigo-600 bg-slate-950 border-slate-800 accent-indigo-500 cursor-pointer"
+          />
+          <label htmlFor="use_roi_toggle" className="text-[11px] text-zinc-300 font-medium cursor-pointer flex-1">
+            Chỉ nhận diện trong vùng chọn đa giác (Bộ lọc ROI hoạt động)
+          </label>
+          <span className="text-[10px] bg-indigo-950 text-indigo-350 border border-indigo-900/40 px-1.5 py-0.5 rounded font-mono font-bold">
+            ROI ACTIVE
+          </span>
+        </div>
+      )}
+
+      {/* Số liệu xe — Thống kê tối giản dạng bar ngang */}
+      <div className="flex justify-between items-center bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-900 divide-x divide-slate-900/40 text-[11px] font-mono">
         {[
           { label: 'Ô tô',    val: displayCar },
           { label: 'Xe máy',  val: displayMoto },
           { label: 'Xe tải',  val: displayTruck },
           { label: 'Xe buýt', val: displayBus },
-        ].map(({ label, val }) => (
-          <div key={label} className="bg-slate-900/20 border border-slate-900/80 p-2.5 rounded-lg text-center">
-            <span className="text-[10px] text-zinc-500 uppercase block">{label}</span>
-            <span className="text-sm font-semibold text-slate-200 mt-0.5 block">{isActive ? val : 0}</span>
+        ].map(({ label, val }, i) => (
+          <div key={label} className={`flex-1 flex justify-center items-center gap-1.5 ${i > 0 ? 'pl-1' : ''}`}>
+            <span className="text-zinc-500">{label}:</span>
+            <span className="font-semibold text-slate-300">{isActive ? val : 0}</span>
           </div>
         ))}
       </div>
 
       {/* Log nhỏ */}
       {logs.length > 0 && (
-        <div className="bg-slate-900/30 border border-slate-900 rounded-lg p-2 max-h-20 overflow-y-auto">
+        <div className="bg-slate-950/40 border border-slate-900 rounded-lg p-2 max-h-16 overflow-y-auto divide-y divide-slate-900/40">
           {logs.map((l, i) => (
-            <p key={i} className="text-[10px] font-mono text-zinc-500">{l}</p>
+            <p key={i} className="text-[9px] font-mono text-zinc-500 py-0.5 first:pt-0 last:pb-0">{l}</p>
           ))}
         </div>
       )}
-
-      {/* Gemini AI */}
-      <div className="border border-slate-900 p-3 rounded-lg bg-slate-950/20 flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] font-medium text-slate-400">Nhận xét với Gemini AI</span>
-          <button
-            onClick={handleGeminiAnalysis}
-            disabled={aiAnalyzing || !isActive}
-            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-900
-                       disabled:text-zinc-650 font-medium text-[11px] rounded transition-all text-white cursor-pointer"
-          >
-            {aiAnalyzing ? 'Đang phân tích...' : 'Phân tích'}
-          </button>
-        </div>
-        {aiReport && (
-          <div className="text-[11px] leading-relaxed text-zinc-400 bg-slate-900/30 p-2.5 rounded border border-slate-900">
-            {aiReport}
-          </div>
-        )}
-      </div>
 
     </div>
   );

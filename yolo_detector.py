@@ -12,16 +12,20 @@ import time
 import threading
 import requests
 import numpy as np
+import logging
 from flask import Flask, Response, request
 
 import torch
 from ultralytics import YOLO
 from vidgear.gears import CamGear
 
+# Cấu hình tắt hoàn toàn cảnh báo/warning từ VidGear để làm sạch console log
+logging.getLogger("vidgear").setLevel(logging.ERROR)
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  Config — chỉnh ở đây
 # ══════════════════════════════════════════════════════════════════════════════
-BASE_API_URL  = "http://localhost:3000/api"
+BASE_API_URL  = "http://127.0.0.1:3000/api"
 MJPEG_PORT    = 5010
 JPEG_QUALITY  = 75
 FRAME_W       = 1280
@@ -48,6 +52,7 @@ BOX_COLORS = {
 # ══════════════════════════════════════════════════════════════════════════════
 _model = None
 _model_lock = threading.Lock()
+_predict_lock = threading.Lock()
 
 def get_model():
     global _model
@@ -146,12 +151,16 @@ class CamThread(threading.Thread):
 
     def stop(self):
         self.stop_event.set()
-        if self.cap:
-            try:
-                self.cap.stop()
-            except Exception:
-                pass
-            self.cap = None
+        # Để tránh block luồng gọi (ví dụ Flask), tắt CamGear trong một luồng phụ độc lập
+        cap_to_stop = self.cap
+        self.cap = None
+        if cap_to_stop:
+            def _close_cap():
+                try:
+                    cap_to_stop.stop()
+                except Exception:
+                    pass
+            threading.Thread(target=_close_cap, daemon=True).start()
 
     def run(self):
         model = get_model()
@@ -165,16 +174,30 @@ class CamThread(threading.Thread):
             # ── Mở stream ────────────────────────────────────────────────────
             self.cap = None
             try:
-                self.cap = CamGear(source=self.video_url,
-                                   stream_mode=True, logging=False).start()
+                if self.stop_event.is_set():
+                    break
+                
+                # Mở stream bằng một biến tạm để tránh race condition nếu bị stop() gọi giữa chừng
+                temp_cap = CamGear(source=self.video_url, stream_mode=True, logging=False).start()
+                
+                if self.stop_event.is_set():
+                    # Nếu bị dừng ngay lúc đang mở đầu, lập tức ngắt stream để dọn dẹp
+                    if temp_cap is not None:
+                        try:
+                            temp_cap.stop()
+                        except Exception:
+                            pass
+                    break
+                
+                self.cap = temp_cap
             except Exception as e:
                 print(f"[!] {self.camera_name}: Lỗi mở stream: {e}, thử lại 5s")
-                time.sleep(5)
+                self.stop_event.wait(5)
                 continue
 
             if self.cap is None:
                 print(f"[!] {self.camera_name}: cap is None, thử lại 5s")
-                time.sleep(5)
+                self.stop_event.wait(5)
                 continue
 
             print(f"[+] {self.camera_name}: Stream mở OK")
@@ -201,12 +224,13 @@ class CamThread(threading.Thread):
                 # ── YOLO mỗi DETECT_SKIP frame ───────────────────────────────
                 if frame_count % DETECT_SKIP == 0:
                     try:
-                        # Chạy predict mộc trên khung hình raw
-                        results = model.predict(
-                            frame, device=DEVICE, verbose=False,
-                            conf=0.15, imgsz=640, # conf thấp để client thoải mái drag lọc lên cao
-                            half=(DEVICE == "cuda")
-                        )
+                        # Chạy predict mộc trên khung hình raw với khóa ghim tranh chấp TensorRT
+                        with _predict_lock:
+                            results = model.predict(
+                                frame, device=DEVICE, verbose=False,
+                                conf=0.15, imgsz=640, # conf thấp để client thoải mái drag lọc lên cao
+                                half=(DEVICE == "cuda")
+                            )
                         detections = []
                         if results:
                             h, w = frame.shape[:2]
@@ -227,9 +251,27 @@ class CamThread(threading.Thread):
                         last_detections = detections
 
                         # Telemetry gửi thống kê cho WebGIS
-                        counts = {}
-                        for d in detections:
-                            counts[d["class"]] = counts.get(d["class"], 0) + 1
+                        telemetry_detections = list(detections)
+                        
+                        # Nếu camera có cấu hình vùng nhận diện, lọc thống kê gửi đi theo vùng ROI
+                        cam_info = get_camera_info(self.camera_id)
+                        detection_zone = cam_info.get("detectionZone") if cam_info else None
+                        if detection_zone and len(detection_zone) >= 3:
+                            pts = np.array([[int(p['x'] * FRAME_W), int(p['y'] * FRAME_H)] for p in detection_zone], dtype=np.int32)
+                            filtered_telemetry = []
+                            for d in telemetry_detections:
+                                cx = int((d["box"][0] + d["box"][2]) / 2 * FRAME_W)
+                                cy = int((d["box"][1] + d["box"][3]) / 2 * FRAME_H)
+                                inside = cv2.pointPolygonTest(pts, (cx, cy), False) >= 0
+                                if inside:
+                                    filtered_telemetry.append(d)
+                            telemetry_detections = filtered_telemetry
+
+                        counts = {"car": 0, "motorcycle": 0, "truck": 0, "bus": 0, "bicycle": 0}
+                        for d in telemetry_detections:
+                            cls = d["class"]
+                            if cls in counts:
+                                counts[cls] += 1
                         total = sum(counts.values())
                         status = ("congested" if total > 28
                                   else "moderate" if total > 14 else "normal")
@@ -259,7 +301,7 @@ class CamThread(threading.Thread):
 
             if not self.stop_event.is_set():
                 print(f"[*] {self.camera_name}: Restart sau 3s...")
-                time.sleep(3)
+                self.stop_event.wait(3)
 
         print(f"[-] CamThread '{self.camera_name}' dừng")
 
@@ -285,7 +327,7 @@ def get_placeholder(camera_id):
     return _placeholder
 
 
-def generate_mjpeg(camera_id, conf_threshold=0.25, enabled_classes=None, show_boxes=True, show_labels=True):
+def generate_mjpeg(camera_id, conf_threshold=0.25, enabled_classes=None, show_boxes=True, show_labels=True, use_roi=True):
     conn_id = f"conn_{camera_id}_{threading.get_ident()}_{int(time.time()*1000)}"
     register_connection(camera_id, conn_id)
 
@@ -316,11 +358,37 @@ def generate_mjpeg(camera_id, conf_threshold=0.25, enabled_classes=None, show_bo
             else:
                 # Copy frame gốc để vẽ tự do theo thông số Client gửi lên
                 annotated = raw_frame.copy()
+
+                # Kiểm tra và áp dụng bộ lọc ROI và vẽ đa giác lên khung hình
+                cam_info = get_camera_info(camera_id)
+                detection_zone = cam_info.get("detectionZone") if cam_info else None
+                
+                if use_roi and detection_zone and len(detection_zone) >= 3:
+                    pts = np.array([[int(p['x'] * FRAME_W), int(p['y'] * FRAME_H)] for p in detection_zone], dtype=np.int32)
+                    
+                    # Vẽ đa giác chỉ dẫn màu vàng cam quyến rũ
+                    cv2.polylines(annotated, [pts], isClosed=True, color=(14, 185, 246), thickness=2)
+                    
+                    # Ghim text trạng thái vùng ROI hoạt động
+                    cv2.putText(annotated, "ROI FILTER ACTIVE", (FRAME_W - 180, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (14, 185, 246), 1, cv2.LINE_AA)
+                    
+                    # Lọc các bounding box nằm ngoài đa giác
+                    filtered_detections = []
+                    for d in detections:
+                        cx = int((d["box"][0] + d["box"][2]) / 2 * FRAME_W)
+                        cy = int((d["box"][1] + d["box"][3]) / 2 * FRAME_H)
+                        inside = cv2.pointPolygonTest(pts, (cx, cy), False) >= 0
+                        if inside:
+                            filtered_detections.append(d)
+                    detections = filtered_detections
+
                 draw_boxes(annotated, detections, conf_threshold, enabled_classes, show_boxes, show_labels)
 
                 # Đếm số xe thực đạt chuẩn điều kiện của Client
                 active_count = sum(1 for d in detections if d["conf"] >= conf_threshold and (enabled_classes is None or d["class"] in enabled_classes))
                 count_txt = f"{active_count} xe duoc loc"
+                if use_roi and detection_zone and len(detection_zone) >= 3:
+                    count_txt += " (vung ROI)"
                 
                 cv2.putText(annotated, f"{worker.camera_name} | {count_txt}",
                             (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
@@ -354,28 +422,80 @@ def generate_mjpeg(camera_id, conf_threshold=0.25, enabled_classes=None, show_bo
 db_cameras_cache = {}
 db_cache_lock = threading.Lock()
 
-# Quản lý nhịp tim tương tác của từng kết nối
-# Cấu trúc: { camera_id: { conn_id: last_ping_time } }
 active_connections = {}
 conn_lock = threading.Lock()
+
+def get_camera_info_from_sqlite(camera_id):
+    import sqlite3
+    import json
+    db_paths = [
+        "database.sqlite",
+        "../database.sqlite",
+        os.path.join(os.path.dirname(__file__), "database.sqlite"),
+        os.path.join(os.path.dirname(__file__), "..", "database.sqlite")
+    ]
+    db_path = None
+    for p in db_paths:
+        if os.path.exists(p):
+            db_path = p
+            break
+    if not db_path:
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, youtubeUrl, yoloConfig, detectionZone FROM cameras WHERE id = ?", (camera_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            try:
+                yolo_cfg = json.loads(row[3]) if row[3] else {}
+            except Exception:
+                yolo_cfg = {}
+            try:
+                det_zone = json.loads(row[4]) if row[4] else []
+            except Exception:
+                det_zone = []
+            return {
+                "id": row[0],
+                "name": row[1],
+                "youtubeUrl": row[2],
+                "yoloConfig": yolo_cfg,
+                "detectionZone": det_zone
+            }
+    except Exception as e:
+        print(f"[!] Fallback SQLite query error for camera {camera_id}: {e}")
+    return None
+
 
 def get_camera_info(camera_id):
     with db_cache_lock:
         if camera_id in db_cameras_cache:
             return db_cameras_cache[camera_id]
     
-    # Nhánh dự phòng: Truy vấn API chính trực tiếp
+    if camera_id == "temp":
+        return None
+
+    # Nhánh dự phòng: Truy vấn SQLite trực tiếp (Cực kỳ mạnh mẽ và không lo nghẽn mạng)
+    sqlite_cam = get_camera_info_from_sqlite(camera_id)
+    if sqlite_cam:
+        with db_cache_lock:
+            db_cameras_cache[camera_id] = sqlite_cam
+        return sqlite_cam
+
+    # Nhánh dự phòng phụ: Truy vấn API chính trực tiếp
     try:
-        r = requests.get(f"{BASE_API_URL}/cameras/{camera_id}", timeout=3)
+        r = requests.get(f"{BASE_API_URL}/cameras/{camera_id}", timeout=1)
         if r.status_code == 200 and r.json().get("success"):
             return r.json().get("camera")
-    except Exception as e:
-        print(f"[!] Lỗi truy vấn thông tin camera {camera_id}: {e}")
+    except Exception:
+        pass
+
     return None
+
 
 def start_worker_if_needed(camera_id):
     with workers_lock:
-        # Lấy thông tin camera mới nhất từ DB/cache
         cam_info = get_camera_info(camera_id)
         if not cam_info:
             print(f"[!] Không tìm thấy cấu hình camera_id {camera_id} để khởi động luồng")
@@ -385,6 +505,8 @@ def start_worker_if_needed(camera_id):
         if not current_url:
             print(f"[!] Camera {camera_id} không cấu hình URL luồng phát (youtubeUrl)")
             return False
+
+        current_name = cam_info.get("name", f"Camera {camera_id}")
 
         if camera_id in cam_workers:
             existing_worker = cam_workers[camera_id]
@@ -396,111 +518,103 @@ def start_worker_if_needed(camera_id):
                     del cam_workers[camera_id]
                 except KeyError:
                     pass
-            elif not existing_worker.stop_event.is_set():
+            elif existing_worker.is_alive() and not existing_worker.stop_event.is_set():
                 return True
             else:
-                # Dọn dẹp luồng cũ bị treo hoặc đã set dừng
                 try:
-                    cam_workers[camera_id].stop()
+                    existing_worker.stop()
                 except Exception:
                     pass
-                del cam_workers[camera_id]
-
-        name = cam_info.get("name", str(camera_id))
-        print(f"[*] KHỞI CHẠY LUỒNG NHẬN DIỆN CAMERA ON-DEMAND: {name} | URL: {current_url}")
-        w = CamThread(camera_id, name, current_url)
-        cam_workers[camera_id] = w
-        w.start()
-        return True
-
-def register_connection(camera_id, conn_id):
-    with conn_lock:
-        if camera_id not in active_connections:
-            active_connections[camera_id] = {}
-        active_connections[camera_id][conn_id] = time.time()
-        print(f"[+] Đăng ký kết nối: {conn_id}. Hiện tại cho '{camera_id}': {len(active_connections[camera_id])}")
-
-def update_connection_ping(camera_id, conn_id):
-    with conn_lock:
-        if camera_id in active_connections and conn_id in active_connections[camera_id]:
-            active_connections[camera_id][conn_id] = time.time()
-
-def unregister_connection(camera_id, conn_id):
-    with conn_lock:
-        if camera_id in active_connections and conn_id in active_connections[camera_id]:
-            del active_connections[camera_id][conn_id]
-            count = len(active_connections[camera_id])
-            print(f"[-] Hủy đăng ký kết nối: {conn_id}. Còn lại: {count}")
-            # Nếu thật sự không còn ai xem nữa, tắt worker camera sau khoảng trễ ngắn
-            if count == 0:
-                threading.Thread(
-                    target=stop_worker_after_delay,
-                    args=(camera_id,),
-                    daemon=True
-                ).start()
-
-def stop_worker_after_delay(camera_id):
-    # Để phòng trường hợp người dùng chỉnh thanh trượt slider đổi conf (gây ngắt kết nối rồi mở lại ngay lập tức)
-    # Ta trì hoãn 1.5 giây trước khi thực sự ngắt stream
-    time.sleep(1.5)
-    with conn_lock:
-        still_has_viewers = camera_id in active_connections and len(active_connections[camera_id]) > 0
-    
-    if not still_has_viewers:
-        with workers_lock:
-            if camera_id in cam_workers:
-                print(f"[*] GIẢI PHÓNG CAMERA {camera_id}: Không hoạt động")
-                cam_workers[camera_id].stop()
                 try:
                     del cam_workers[camera_id]
                 except KeyError:
                     pass
 
-def connection_cleaner_loop():
-    """Luồng dọn dẹp các kết nối bị sập socket không thể gửi tín hiệu unmount"""
-    print("[*] Khởi động Luồng dọn dẹp kết nối mồ côi (Connection Heartbeat Cleaner)...")
-    while True:
-        time.sleep(2)
-        now = time.time()
-        cameras_to_cleanup = []
-        
-        with conn_lock:
-            for camera_id, conns in list(active_connections.items()):
-                for conn_id, last_time in list(conns.items()):
-                    # Nếu hơn 5 giây không cập nhật ping (bị sập/đóng tab/mất mạng) -> tự động dọn dẹp
-                    if now - last_time > 5.0:
-                        print(f"[!] Tự dọn dẹp kết nối chết: {conn_id} (đã 5 giây không hoạt động)")
-                        del conns[conn_id]
-                
-                if len(conns) == 0:
-                    cameras_to_cleanup.append(camera_id)
-        
-        # Ngắt các worker thật sự rảnh
-        for camera_id in cameras_to_cleanup:
-            with workers_lock:
-                if camera_id in cam_workers:
-                    print(f"[*] AUTO CLEANUP GIẢI PHÓNG CAMERA {camera_id}: Không thấy phản hồi nào cập nhật nhịp tim.")
-                    cam_workers[camera_id].stop()
-                    try:
-                        del cam_workers[camera_id]
-                    except KeyError:
-                        pass
+        print(f"[*] KHỞI CHẠY LUỒNG NHẬN DIỆN CAMERA: {current_name} | URL: {current_url}")
+        w = CamThread(camera_id, current_name, current_url)
+        cam_workers[camera_id] = w
+        w.start()
+        return True
+
+
+def register_connection(camera_id, conn_id):
+    with conn_lock:
+        if camera_id not in active_connections:
+            active_connections[camera_id] = set()
+        active_connections[camera_id].add(conn_id)
+        print(f"[+] Đăng ký kết nối: {conn_id}. Hiện tại cho '{camera_id}': {len(active_connections[camera_id])}")
+
+
+def update_connection_ping(camera_id, conn_id):
+    pass  # Không cần ping nữa vì unmount đóng cổng trực tiếp
+
+
+def unregister_connection(camera_id, conn_id):
+    with conn_lock:
+        if camera_id in active_connections and conn_id in active_connections[camera_id]:
+            active_connections[camera_id].remove(conn_id)
+            count = len(active_connections[camera_id])
+            print(f"[-] Hủy đăng ký kết nối: {conn_id}. Còn lại: {count}")
+            # Nếu thật sự không còn ai xem nữa, tắt worker camera ngay lập tức hoặc sau 1 giây cực ngắn
+            if count == 0:
+                threading.Thread(
+                    target=stop_worker_if_unused,
+                    args=(camera_id,),
+                    daemon=True
+                ).start()
+
+
+def stop_worker_if_unused(camera_id):
+    time.sleep(1.0)
+    with conn_lock:
+        active_count = len(active_connections.get(camera_id, set()))
+    if active_count == 0:
+        with workers_lock:
+            if camera_id in cam_workers:
+                print(f"[*] NGỪNG NHẬN DIỆN CAMERA {camera_id}: Không còn kết nối hoạt động")
+                worker = cam_workers[camera_id]
+                worker.stop()
+                try:
+                    del cam_workers[camera_id]
+                except KeyError:
+                    pass
 
 
 @flask_app.route("/stream/<camera_id>")
 def video_feed(camera_id):
-    # Khởi chạy luồng OpenCV + YOLO cho camera này khi có người yêu cầu xem
+    url = request.args.get("url")
+    name = request.args.get("name")
+    roi_raw = request.args.get("roi")
+
+    # Cập nhật cache từ query parameters của request nếu có
+    with db_cache_lock:
+        if camera_id not in db_cameras_cache:
+            db_cameras_cache[camera_id] = {}
+        if url:
+            db_cameras_cache[camera_id]["youtubeUrl"] = url
+        if name:
+            db_cameras_cache[camera_id]["name"] = name
+        if roi_raw:
+            try:
+                import json
+                db_cameras_cache[camera_id]["detectionZone"] = json.loads(roi_raw)
+            except Exception:
+                pass
+        elif "detectionZone" not in db_cameras_cache[camera_id]:
+            db_cameras_cache[camera_id]["detectionZone"] = []
+
     if not start_worker_if_needed(camera_id):
-        return Response("Camera stream không khả dụng", status=404)
+        return Response("Camera stream không khoa dung", status=404)
 
     conf = request.args.get("conf", default=0.25, type=float)
     classes_raw = request.args.get("classes", default="car,motorcycle,truck,bus,bicycle", type=str)
     show_boxes = request.args.get("show_boxes", default="true", type=str).lower() == "true"
     show_labels = request.args.get("show_labels", default="true", type=str).lower() == "true"
+    use_roi = request.args.get("use_roi", default="true", type=str).lower() == "true"
     
     enabled_classes = [c.strip() for c in classes_raw.split(",") if c.strip()]
     
-    return Response(generate_mjpeg(camera_id, conf, enabled_classes, show_boxes, show_labels),
+    return Response(generate_mjpeg(camera_id, conf, enabled_classes, show_boxes, show_labels, use_roi),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -513,24 +627,7 @@ def stop_view(camera_id):
         res.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         return res
 
-    print(f"[*] NHẬN ĐƯỢC TÍN HIỆU DỪNG XEM CHỦ ĐỘNG CHO CAMERA {camera_id}")
-    
-    with conn_lock:
-        if camera_id in active_connections:
-            print(f"[*] Xóa sạch các phiên active của camera {camera_id}: {list(active_connections[camera_id].keys())}")
-            active_connections[camera_id].clear()
-
-    # Bàn giao việc dọn dẹp cho unregister_connection hoặc connection_cleaner để tránh race condition
-    with workers_lock:
-        if camera_id in cam_workers:
-            print(f"[*] DỪNG LUỒNG NHẬN DIỆN CAMERA NGAY LẬP TỨC CHỦ ĐỘNG: {camera_id}")
-            cam_workers[camera_id].stop()
-            try:
-                del cam_workers[camera_id]
-            except KeyError:
-                pass
-
-    res = flask_app.make_response(({"success": True, "message": f"Dừng stream {camera_id}"}, 200))
+    res = flask_app.make_response(({"success": True, "message": "Ignored. Managed automatically via socket closure"}, 200))
     res.headers["Access-Control-Allow-Origin"] = "*"
     res.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return res
@@ -543,32 +640,96 @@ def health():
     return {"status": "ok", "cameras": cams, "device": DEVICE}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  Sync camera từ DB
-# ══════════════════════════════════════════════════════════════════════════════
-def sync_cameras():
-    global db_cameras_cache
+def capture_single_frame(video_url):
+    print(f"[*] ĐANG CHỤP ẢNH TĨNH TỰ ĐỘNG TỪ NGUỒN: {video_url}")
+    cap = None
     try:
-        r = requests.get(f"{BASE_API_URL}/cameras", timeout=3)
-        if r.status_code != 200 or not r.json().get("success"):
-            return
-        cameras = r.json().get("cameras", [])
-        db_ids  = {cam["id"] for cam in cameras}
-
-        # Lưu trữ danh sách camera vào cache local
-        with db_cache_lock:
-            db_cameras_cache = {cam["id"]: cam for cam in cameras}
-
-        with workers_lock:
-            # Chỉ dọn dẹp máy trạm camera không còn tồn tại trong Cơ sở dữ liệu
-            for cid in list(cam_workers):
-                if cid not in db_ids:
-                    print(f"[-] Camera {cid} đã bị xóa từ DB chính. Giải phóng worker...")
-                    cam_workers[cid].stop()
-                    del cam_workers[cid]
-
+        cap = CamGear(source=video_url, stream_mode=True, logging=False).start()
+        for _ in range(40):
+            frame = cap.read()
+            if frame is not None:
+                if len(frame.shape) == 3 and frame.shape[0] > 0 and frame.shape[1] > 0:
+                    return frame
+            time.sleep(0.05)
     except Exception as e:
-        print(f"[!] sync_cameras: {e}")
+        print(f"[!] Lỗi chụp nhanh ảnh tĩnh từ {video_url}: {e}")
+    finally:
+        if cap is not None:
+            try:
+                cap.stop()
+            except Exception:
+                pass
+    return None
+
+
+@flask_app.route("/snapshot/<camera_id>", methods=["GET", "OPTIONS"])
+def snapshot(camera_id):
+    if request.method == "OPTIONS":
+        res = flask_app.make_response(("", 200))
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        res.headers["Access-Control-Allow-Headers"] = "*"
+        res.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        return res
+
+    worker_active = False
+    with workers_lock:
+        if camera_id in cam_workers:
+            worker = cam_workers[camera_id]
+            if worker.is_alive() and not worker.stop_event.is_set():
+                worker_active = True
+
+    if worker_active:
+        with workers_lock:
+            worker = cam_workers[camera_id]
+        raw_frame, _ = worker.get_latest_data()
+        if raw_frame is not None:
+            ret, buf = cv2.imencode(".jpg", raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ret:
+                res = flask_app.make_response((buf.tobytes(), 200))
+                res.headers["Content-Type"] = "image/jpeg"
+                res.headers["Access-Control-Allow-Origin"] = "*"
+                return res
+
+    if camera_id == "temp":
+        url = request.args.get("url") or request.args.get("youtubeUrl")
+    else:
+        cam_info = get_camera_info(camera_id)
+        url = cam_info.get("youtubeUrl", "") if cam_info else ""
+
+    if not url:
+        f = np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8)
+        cv2.putText(f, "Khong tim thay URL camera",
+                    (50, FRAME_H//2), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8, (0, 0, 255), 2)
+        _, buf = cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        res = flask_app.make_response((buf.tobytes(), 200))
+        res.headers["Content-Type"] = "image/jpeg"
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        return res
+
+    raw_frame = capture_single_frame(url)
+
+    if raw_frame is None:
+        f = np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8)
+        cv2.putText(f, "Khong the chup anh tu nguon-tinh (timeout)",
+                    (50, FRAME_H//2), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8, (0, 0, 255), 2)
+        _, buf = cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        res = flask_app.make_response((buf.tobytes(), 200))
+        res.headers["Content-Type"] = "image/jpeg"
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        return res
+
+    ret, buf = cv2.imencode(".jpg", raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    if not ret:
+        res = flask_app.make_response(("Encoder error", 500))
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        return res
+
+    res = flask_app.make_response((buf.tobytes(), 200))
+    res.headers["Content-Type"] = "image/jpeg"
+    res.headers["Access-Control-Allow-Origin"] = "*"
+    return res
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -576,42 +737,29 @@ def sync_cameras():
 # ══════════════════════════════════════════════════════════════════════════════
 def main():
     print("=" * 55)
-    print("  YOLOv11 MJPEG Stream — Simple Edition with Client-Side Dynamic Rendering")
+    print("  YOLOv11 MJPEG Stream — Simple On-Demand Connection Edition")
     print(f"  Device : {DEVICE}")
     print(f"  Port   : {MJPEG_PORT}")
     print(f"  Model  : {MODEL_PATH}")
-    print(f"  Skip   : YOLO mỗi {DETECT_SKIP} frame")
+    print(f"  Skip   : YOLO moi {DETECT_SKIP} frame")
     print(f"  JPEG   : {JPEG_QUALITY}% @ {FRAME_W}x{FRAME_H}")
     print("=" * 55)
 
     get_model()  # load model trước
 
-    # Khởi chạy luồng dọn dẹp các kết nối lỗi/mồ côi chạy ẩn
-    cleaner_thread = threading.Thread(
-        target=connection_cleaner_loop,
-        daemon=True
-    )
-    cleaner_thread.start()
-
-    flask_thread = threading.Thread(
-        target=lambda: flask_app.run(
-            host="0.0.0.0", port=MJPEG_PORT,
-            threaded=True, use_reloader=False
-        ),
-        daemon=True
-    )
-    flask_thread.start()
     print(f"[OK] Stream: http://localhost:{MJPEG_PORT}/stream/<camera_id>")
     print(f"[OK] Health: http://localhost:{MJPEG_PORT}/health\n")
 
     try:
-        while True:
-            sync_cameras()
-            time.sleep(5)
+        flask_app.run(
+            host="0.0.0.0", port=MJPEG_PORT,
+            threaded=True, use_reloader=False
+        )
     except KeyboardInterrupt:
-        print("\n[*] Đang tắt...")
+        print("\n[*] Dang tat...")
+    finally:
         with workers_lock:
-            for w in cam_workers.values():
+            for w in list(cam_workers.values()):
                 w.stop()
 
 
