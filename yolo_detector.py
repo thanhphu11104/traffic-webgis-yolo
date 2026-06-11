@@ -330,7 +330,7 @@ def get_placeholder(camera_id):
 def generate_mjpeg(camera_id, conf_threshold=0.25, enabled_classes=None, show_boxes=True, show_labels=True, use_roi=True):
     conn_id = f"conn_{camera_id}_{threading.get_ident()}_{int(time.time()*1000)}"
     register_connection(camera_id, conn_id)
-
+    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + get_placeholder(camera_id) + b"\r\n"
     try:
         while True:
             # Cập nhật ping của kết nối này để chứng minh socket vẫn active

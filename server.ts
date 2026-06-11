@@ -24,7 +24,7 @@ function startPythonDetector() {
   logDebug('Spawning Python YOLO detector on port 5010...');
   
   // Choose python3 by default, fallback to python if needed
-  const pyProcess = spawn('python3', ['yolo_detector.py']);
+  const pyProcess = spawn('venv\\Scripts\\python.exe', ['yolo_detector.py']);
 
   pyProcess.stdout.on('data', (data) => {
     logDebug(`[YOLO STDOUT]: ${data.toString().trim()}`);
@@ -422,12 +422,34 @@ async function startServer() {
       });
     });
 
-    proxyReq.on('error', (err) => {
-      // Python server is unreachable (missing ML dependencies in AI Studio Cloud container env).
-      // Seamlessly fall back to Node simulation to provide full interactive functionality!
+     proxyReq.on('error', (err) => {
+      logDebug(`[MJPEG PROXY ERROR] Failed to bridge to Python 5010: ${err.message}`);
       if (isStream) {
-        serveSimulatedMJPEGStream(cameraId, req, res);
-        startSimulatedTelemetryForCamera(cameraId);
+        // Thử lại sau 3 giây thay vì fallback simulation ngay
+        setTimeout(() => {
+          const retryReq = http.request({
+            host: '127.0.0.1',
+            port: 5010,
+            path: rawPath,
+            method: req.method,
+            headers: { ...req.headers, host: '127.0.0.1:5010' }
+          }, (proxyRes) => {
+            if (!res.headersSent) {
+              res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+              proxyRes.pipe(res, { end: true });
+              req.on('close', () => proxyRes.destroy());
+            }
+          });
+          retryReq.on('error', () => {
+            // Sau retry vẫn lỗi mới fallback simulation
+            if (!res.headersSent) {
+              serveSimulatedMJPEGStream(cameraId, req, res);
+              startSimulatedTelemetryForCamera(cameraId);
+            }
+          });
+          req.on('close', () => retryReq.destroy());
+          retryReq.end();
+        }, 3000);
       } else if (isSnapshot) {
         res.setHeader('Content-Type', 'image/jpeg');
         res.send(MOCK_JPEG_BUFFER);
@@ -444,7 +466,41 @@ async function startServer() {
 
     req.pipe(proxyReq, { end: true });
   });
+    app.get('/api/stream/:cameraId', (req, res) => {
+    const { cameraId } = req.params;
+    const queryString = new URLSearchParams(req.query as Record<string, string>).toString();
+    const targetPath = `/stream/${cameraId}${queryString ? '?' + queryString : ''}`;
 
+    const proxyReq = http.request(
+      { hostname: '127.0.0.1', port: 5010, path: targetPath, method: 'GET' },
+      (proxyRes) => {
+        // Flush headers ngay — tránh Node timeout khi chờ headers
+        res.writeHead(proxyRes.statusCode || 200, {
+          'Content-Type': proxyRes.headers['content-type'] || 'multipart/x-mixed-replace; boundary=frame',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        });
+        proxyRes.pipe(res, { end: true });
+      }
+    );
+
+    proxyReq.on('error', (err) => {
+      console.error(`[MJPEG PROXY ERROR] Failed to bridge to Python 5010:`, err.message);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Stream không khả dụng', detail: err.message });
+      } else {
+        res.end();
+      }
+    });
+
+    // Client đóng tab/unmount → hủy request đến Python ngay
+    req.on('close', () => proxyReq.destroy());
+
+    proxyReq.end();
+  });
+
+  // Serve static assets / Vite files
   // Serve static assets / Vite files
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
